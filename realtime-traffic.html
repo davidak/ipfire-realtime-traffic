@@ -1,0 +1,129 @@
+<!doctype html>
+<html>
+<head>
+	<title>Realtime Network-Traffic</title>
+	<script language="javascript" type="text/javascript" src="//code.jquery.com/jquery-1.11.1.min.js"></script>
+	<script language="javascript" type="text/javascript" src="include/underscore-min.js"></script>
+	<script language="javascript" type="text/javascript" src="include/gauge.min.js"></script>
+	<script language="javascript" type="text/javascript" src="include/jquery.flot.min.js"></script>
+</head>
+
+<script type="text/javascript">
+// Configure
+
+// Upload and Download Speed of your Provider in MBit/s
+download_limit = 100;
+upload_limit = 8;
+// END
+
+$(document).ready(function(){
+	setup();
+	refreshInetInfo();
+});
+
+function setup() {
+	var size = $("#gauges").width()/2-10;
+	var dlrange = _.range(0, download_limit+1, 10);
+	var ulrange = _.range(0, upload_limit+1, 1);
+
+	var dlgauge = new Gauge({
+		renderTo: 'dlgauge',
+		width: size,
+		height: size,
+		units: 'MBit/s',
+		title: 'Download',
+		maxValue: download_limit,
+		majorTicks: dlrange,
+		minorTicks: 2,
+		animation: { delay: 0, duration: 500, fn: 'linear' },
+		highlights  : [{ from : 0,   to : download_limit, color : '#ccc' }],
+		colors: {
+			needle     : { start : 'rgba(0, 255, 0, 1)', end : 'rgba(0, 194, 0, .9)' }
+		}
+	});
+
+	var ulgauge = new Gauge({
+		renderTo: 'ulgauge',
+		width: size,
+		height: size,
+		units: 'MBit/s',
+		title: 'Upload',
+		maxValue: upload_limit,
+		majorTicks: ulrange,
+		minorTicks: 2,
+		animation: { delay: 0, duration: 500, fn: 'linear' },
+		highlights  : [{ from : 0,   to : upload_limit, color : '#ccc' }],
+		colors: {
+			needle     : { start : 'rgba(255, 0, 0, 1)', end : 'rgba(194, 0, 0, .9)' }
+		}
+	});
+
+	dlgauge.draw();
+	ulgauge.draw();
+}
+
+var t_current;
+var t_last = 0;
+var rxb_current;
+var rxb_last = 0;
+var txb_current;
+var txb_last = 0;
+
+function refreshInetInfo() {
+	$.ajax({
+		type: 'get',
+		url: '/cgi-bin/speed.cgi',
+		success: function(xml) {
+			t_current = new Date();
+			var t_diff = t_current - t_last;
+
+			rxb_current = $("rxb", xml).text();
+			var rxb_diff = rxb_current - rxb_last;
+			rxb_last = rxb_current;
+
+			var rx_bits = rxb_diff * 8192 / t_diff;
+			var rx_fmt = format_mbit(rx_bits);
+
+			txb_current = $("txb", xml).text();
+			var txb_diff = txb_current - txb_last;
+			txb_last = txb_current;
+
+			var tx_bits = txb_diff * 8192 / t_diff;
+			var tx_fmt = format_mbit(tx_bits);
+
+			if (t_last != 0) {
+				Gauge.Collection.get('dlgauge').setValue(rx_fmt);
+				Gauge.Collection.get('ulgauge').setValue(tx_fmt);
+			}
+
+			t_last = t_current;
+		}
+	});
+	window.setTimeout("refreshInetInfo()", 500);
+	window.setTimeout("gaugeResize()", 1000);
+}
+
+function gaugeResize() {
+	var size = $("#gauges").width()/2-10;
+	Gauge.Collection.get('dlgauge').updateConfig({ width: size, height: size });
+	Gauge.Collection.get('ulgauge').updateConfig({ width: size, height: size });
+}
+
+function format_mbit(bytes) {
+	// convert to MBit/s
+	bytes /= 1024*1024;
+	// Round the output
+	mbit = bytes.toFixed(2);
+	return mbit;
+}
+</script>
+
+<body>
+
+<div id="gauges" style="width: 98%; margin: 1% auto 0 auto; text-align: center;">
+	<canvas id="dlgauge"></canvas>
+	<canvas id="ulgauge"></canvas>
+</div>
+
+</body>
+</html>
